@@ -2,7 +2,6 @@ package slakki
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/slack-go/slack"
@@ -21,6 +20,7 @@ type manager struct {
 	interactionCommand map[string]CMDHandler[slack.InteractionCallback]
 	sClient            *socketmode.Client
 	client             *slack.Client
+	errorHandler       ErrorHandler
 }
 
 func NewManager(sClient *socketmode.Client, client *slack.Client) Manager {
@@ -29,7 +29,12 @@ func NewManager(sClient *socketmode.Client, client *slack.Client) Manager {
 		interactionCommand: make(map[string]CMDHandler[slack.InteractionCallback]),
 		sClient:            sClient,
 		client:             client,
+		errorHandler:       renderError,
 	}
+}
+
+func (m *manager) SetErrorHandler(handler ErrorHandler) {
+	m.errorHandler = handler
 }
 
 func (m *manager) Slash(name string, handler CMDHandler[slack.SlashCommand]) {
@@ -53,9 +58,7 @@ func (m *manager) ListenAndServe() error {
 	go func(ctx context.Context, client *socketmode.Client) {
 
 		for event := range client.Events {
-			if err := m.handleEvent(event); err != nil {
-				fmt.Println(err)
-			}
+			go m.handleEvent(event)
 		}
 
 	}(context.Background(), m.sClient)
@@ -64,7 +67,7 @@ func (m *manager) ListenAndServe() error {
 
 }
 
-func (m *manager) handleEvent(event socketmode.Event) error {
+func (m *manager) handleEvent(event socketmode.Event) {
 
 	switch req := event.Data.(type) {
 
@@ -74,12 +77,12 @@ func (m *manager) handleEvent(event socketmode.Event) error {
 		command := strings.TrimPrefix(req.Command, "/")
 		cmd, ok := m.slashCommands[command]
 		if !ok {
-			return fmt.Errorf("command %s not found", command)
+			m.errorHandler(m.client, req.ChannelID, ErrCommandNotFound)
 		}
 
 		err := cmd(m.client, req)
 		if err != nil {
-			return err
+			m.errorHandler(m.client, req.ChannelID, err)
 		}
 
 	case slack.InteractionCallback:
@@ -88,17 +91,15 @@ func (m *manager) handleEvent(event socketmode.Event) error {
 		command := req.CallbackID
 		cmd, ok := m.interactionCommand[command]
 		if !ok {
-			return fmt.Errorf("command %s not found", command)
+			m.errorHandler(m.client, req.Channel.ID, ErrCommandNotFound)
 		}
 
 		err := cmd(m.client, req)
 		if err != nil {
-			return err
+			m.errorHandler(m.client, req.Channel.ID, err)
 		}
 
 	}
-
-	return nil
 
 }
 
