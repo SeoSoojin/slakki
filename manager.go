@@ -11,6 +11,7 @@ import (
 type Manager interface {
 	Slash(name string, handler CMDHandler[slack.SlashCommand])
 	Interaction(name string, handler CMDHandler[slack.InteractionCallback])
+	SetErrorHandler(handler ErrorHandler)
 	Mount(prefix string, src Manager) (Manager, error)
 	ListenAndServe() error
 }
