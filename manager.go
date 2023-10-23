@@ -9,28 +9,29 @@ import (
 )
 
 type Manager interface {
-	Slash(name string, handler CMDHandler[slack.SlashCommand])
-	Interaction(name string, handler CMDHandler[slack.InteractionCallback])
+	Slash(name string, handler SlashHandler, opts ...CommandOptions)
+	Callback(name string, handler CallbackHandler)
 	SetErrorHandler(handler ErrorHandler)
 	Mount(prefix string, src Manager) (Manager, error)
 	ListenAndServe() error
 }
 
 type manager struct {
-	slashCommands      map[string]CMDHandler[slack.SlashCommand]
-	interactionCommand map[string]CMDHandler[slack.InteractionCallback]
-	sClient            *socketmode.Client
-	client             *slack.Client
-	errorHandler       ErrorHandler
+	slashCommands    map[string]SlashHandler
+	callbackCommands map[string]CallbackHandler
+	helpers          map[string]HelpHandler
+	sClient          *socketmode.Client
+	client           *slack.Client
+	errorHandler     ErrorHandler
 }
 
 func NewManager(sClient *socketmode.Client, client *slack.Client) Manager {
 	return &manager{
-		slashCommands:      make(map[string]CMDHandler[slack.SlashCommand]),
-		interactionCommand: make(map[string]CMDHandler[slack.InteractionCallback]),
-		sClient:            sClient,
-		client:             client,
-		errorHandler:       renderError,
+		slashCommands:    make(map[string]SlashHandler),
+		callbackCommands: make(map[string]CallbackHandler),
+		sClient:          sClient,
+		client:           client,
+		errorHandler:     renderError,
 	}
 }
 
@@ -38,12 +39,18 @@ func (m *manager) SetErrorHandler(handler ErrorHandler) {
 	m.errorHandler = handler
 }
 
-func (m *manager) Slash(name string, handler CMDHandler[slack.SlashCommand]) {
+func (m *manager) Slash(name string, handler SlashHandler, opts ...CommandOptions) {
+	config := commmandOptionsCompose(name, opts...)
+	config.Apply(m)
 	m.slashCommands[name] = handler
 }
 
-func (m *manager) Interaction(name string, handler CMDHandler[slack.InteractionCallback]) {
-	m.interactionCommand[name] = handler
+func (m *manager) Callback(name string, handler CallbackHandler) {
+	m.callbackCommands[name] = handler
+}
+
+func (m *manager) help(name string, handler HelpHandler) {
+	m.helpers[name] = handler
 }
 
 func (m *manager) ListenAndServe() error {
@@ -59,7 +66,7 @@ func (m *manager) ListenAndServe() error {
 	go func(ctx context.Context, client *socketmode.Client) {
 
 		for event := range client.Events {
-			go m.handleEvent(event)
+			go m.handleEvent(ctx, event)
 		}
 
 	}(context.Background(), m.sClient)
@@ -68,7 +75,7 @@ func (m *manager) ListenAndServe() error {
 
 }
 
-func (m *manager) handleEvent(event socketmode.Event) {
+func (m *manager) handleEvent(ctx context.Context, event socketmode.Event) {
 
 	switch req := event.Data.(type) {
 
@@ -76,12 +83,19 @@ func (m *manager) handleEvent(event socketmode.Event) {
 
 		m.sClient.Ack(*event.Request)
 		command := strings.TrimPrefix(req.Command, "/")
+		if req.Text == "--help" {
+			if helper, ok := m.helpers[command]; ok {
+				helper(m.client, req.ChannelID, command)
+				return
+			}
+		}
+
 		cmd, ok := m.slashCommands[command]
 		if !ok {
 			m.errorHandler(m.client, req.ChannelID, ErrCommandNotFound)
 		}
 
-		err := cmd(m.client, req)
+		err := cmd(ctx, m.client, req)
 		if err != nil {
 			m.errorHandler(m.client, req.ChannelID, err)
 		}
@@ -90,7 +104,7 @@ func (m *manager) handleEvent(event socketmode.Event) {
 
 		m.sClient.Ack(*event.Request)
 		command := req.CallbackID
-		cmd, ok := m.interactionCommand[command]
+		cmd, ok := m.callbackCommands[command]
 		if !ok {
 			m.errorHandler(m.client, req.Channel.ID, ErrCommandNotFound)
 		}
@@ -121,8 +135,8 @@ func (m *manager) Mount(prefix string, src Manager) (Manager, error) {
 		m.slashCommands[prefix+k] = v
 	}
 
-	for k, v := range srcM.interactionCommand {
-		m.interactionCommand[prefix+k] = v
+	for k, v := range srcM.callbackCommands {
+		m.callbackCommands[prefix+k] = v
 	}
 
 	return m, nil
