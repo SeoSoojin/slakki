@@ -98,6 +98,7 @@ func (m *manager) handleEvent(ctx context.Context, event socketmode.Event) {
 		cmd, ok := m.slashCommands[command]
 		if !ok {
 			m.errorHandler(m.client, req.ChannelID, ErrCommandNotFound)
+			return
 		}
 
 		err := cmd(ctx, m.client, req)
@@ -112,6 +113,7 @@ func (m *manager) handleEvent(ctx context.Context, event socketmode.Event) {
 		cmd, ok := m.callbackCommands[command]
 		if !ok {
 			m.errorHandler(m.client, req.Channel.ID, ErrCommandNotFound)
+			return
 		}
 
 		err := cmd(ctx, m.client, req)
