@@ -15,3 +15,5 @@ type HelpHandler func(client *slack.Client, channel string, command string) erro
 type CMDTypes interface {
 	slack.SlashCommand | slack.InteractionCallback
 }
+
+type CMDHandler[C CMDTypes] func(client *slack.Client, command C) error
