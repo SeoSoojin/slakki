@@ -29,6 +29,7 @@ func NewManager(sClient *socketmode.Client, client *slack.Client) Manager {
 	return &manager{
 		slashCommands:    make(map[string]SlashHandler),
 		callbackCommands: make(map[string]CallbackHandler),
+		helpers:          make(map[string]HelpHandler),
 		sClient:          sClient,
 		client:           client,
 		errorHandler:     renderError,
