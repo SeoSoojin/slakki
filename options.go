@@ -4,25 +4,26 @@ type CommandOptions func(*commandConfig)
 
 type commandConfig struct {
 	name      string
-	Callbacks map[string]CallbackHandler
-	Help      HelpHandler
+	callbacks map[string]CallbackHandler
+	help      HelpHandler
 }
 
 func WithCallback(id string, callback CallbackHandler) CommandOptions {
 	return func(o *commandConfig) {
-		o.Callbacks[id] = callback
+		o.callbacks[id] = callback
 	}
 }
 
 func WithHelp(help HelpHandler) CommandOptions {
 	return func(o *commandConfig) {
-		o.Help = help
+		o.help = help
 	}
 }
 
 func commmandOptionsCompose(name string, opts ...CommandOptions) *commandConfig {
 	config := &commandConfig{
-		Callbacks: make(map[string]CallbackHandler),
+		name:      name,
+		callbacks: make(map[string]CallbackHandler),
 	}
 	for _, opt := range opts {
 		opt(config)
@@ -32,14 +33,14 @@ func commmandOptionsCompose(name string, opts ...CommandOptions) *commandConfig 
 
 func (c commandConfig) Apply(manager *manager) error {
 
-	if c.Callbacks != nil {
-		for id, callback := range c.Callbacks {
+	if c.callbacks != nil {
+		for id, callback := range c.callbacks {
 			manager.callback(id, callback)
 		}
 	}
 
-	if c.Help != nil {
-		manager.help(c.name, c.Help)
+	if c.help != nil {
+		manager.help(c.name, c.help)
 	}
 
 	return nil
