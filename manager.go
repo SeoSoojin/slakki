@@ -9,8 +9,8 @@ import (
 )
 
 type Manager interface {
-	Slash(name string, handler SlashHandler, opts ...CommandOptions)
-	Callback(name string, handler CallbackHandler)
+	Slash(name string, handler CMDHandler[slack.SlashCommand], opts ...CommandOptions)
+	Callback(name string, handler CMDHandler[slack.InteractionCallback])
 	SetErrorHandler(handler ErrorHandler)
 	Mount(prefix string, src Manager) (Manager, error)
 	ListenAndServe() error
@@ -39,13 +39,17 @@ func (m *manager) SetErrorHandler(handler ErrorHandler) {
 	m.errorHandler = handler
 }
 
-func (m *manager) Slash(name string, handler SlashHandler, opts ...CommandOptions) {
+func (m *manager) Slash(name string, handler CMDHandler[slack.SlashCommand], opts ...CommandOptions) {
 	config := commmandOptionsCompose(name, opts...)
 	config.Apply(m)
-	m.slashCommands[name] = handler
+	m.slashCommands[name] = SlashHandler(handler)
 }
 
-func (m *manager) Callback(name string, handler CallbackHandler) {
+func (m *manager) Callback(name string, handler CMDHandler[slack.InteractionCallback]) {
+	m.callback(name, CallbackHandler(handler))
+}
+
+func (m *manager) callback(name string, handler CallbackHandler) {
 	m.callbackCommands[name] = handler
 }
 
@@ -109,7 +113,7 @@ func (m *manager) handleEvent(ctx context.Context, event socketmode.Event) {
 			m.errorHandler(m.client, req.Channel.ID, ErrCommandNotFound)
 		}
 
-		err := cmd(m.client, req)
+		err := cmd(ctx, m.client, req)
 		if err != nil {
 			m.errorHandler(m.client, req.Channel.ID, err)
 		}

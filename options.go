@@ -32,7 +32,7 @@ func (c commandConfig) Apply(manager *manager) error {
 
 	if c.Callbacks != nil {
 		for id, callback := range c.Callbacks {
-			manager.Callback(id, callback)
+			manager.callback(id, callback)
 		}
 	}
 
