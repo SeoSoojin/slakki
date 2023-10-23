@@ -21,7 +21,9 @@ func WithHelp(help HelpHandler) CommandOptions {
 }
 
 func commmandOptionsCompose(name string, opts ...CommandOptions) *commandConfig {
-	config := &commandConfig{}
+	config := &commandConfig{
+		Callbacks: make(map[string]CallbackHandler),
+	}
 	for _, opt := range opts {
 		opt(config)
 	}
