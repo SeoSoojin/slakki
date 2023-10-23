@@ -11,3 +11,7 @@ type CallbackHandler func(client *slack.Client, command slack.InteractionCallbac
 
 type ErrorHandler func(client *slack.Client, channel string, err error) error
 type HelpHandler func(client *slack.Client, channel string, command string) error
+
+type CMDTypes interface {
+	slack.SlashCommand | slack.InteractionCallback
+}
